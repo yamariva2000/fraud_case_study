@@ -113,10 +113,10 @@ def plot_country_fraud():
     ax = f.add_subplot(111)
     ax.set_ylabel('percent of total fraud ', fontsize=15)
     # ax.plot(np.linspace(start=0,stop=19,num=20),countries['cum_percent'][:top].values)
-    ax.fill_between(range(top), countries['cum_percent'][:top].values, label='cumulative percent of fraud',
+    ax.fill_between(np.arange(0,top+1,1), countries['cum_percent'][:top+1].values, label='cumulative percent of fraud',
                     color=[.7, .7, .7])
 
-    ax.bar(range(top), countries['fraud_percent_total'][:top].values, label='percent of total fraud', color=[.5, 0, .2])
+    ax.bar(np.arange(-.4,top-.4,1), countries['fraud_percent_total'][:top].values, label='percent of total fraud', color=[.5, 0, .2])
     plt.xticks(range(top), countries.index[:top], rotation=45, fontsize=16)
     plt.legend(loc='upper left', fontsize=20)
     ax2 = ax.twinx()
@@ -173,7 +173,9 @@ def heat_maps():
         plt.title('{} vs fraud percent '.format(i), fontsize=22)
 
         sb.set(font_scale=1.4)
-        sb.heatmap(df[['perc']][:20], xticklabels=False)
+
+        sb.heatmap(df[['Country','perc']])
+        #sb.heatmap(df[['perc']][:20], xticklabels=False)
         plt.yticks(fontsize=15, rotation=0)
 
         plt.xlabel('% Fraud', fontsize=15)
@@ -308,11 +310,43 @@ def plot_countries():
                          aggfunc='count', values='user_id', margins=True, margins_name='Total', fill_value=0
                          )
 
+def barplots():
+    '''make pivot tables across several variables to present in seaborn heat map'''
+    d = data()
+    d.load()
+
+    d.clean()
+
+    f = plt.figure(1, figsize=(25, 15))
+    f.suptitle('Figure 1: Transaction fraud vs Category', fontsize=26)
+    ct = 1
+
+    # print d.transact.columns
+    index = [u'source', u'sex', u'Continent', u'account_age_cat', u'age_range', u'purchase_range']
+
+    for i in index:
+        ax = f.add_subplot(2, 3, ct)
+        plt.title('{} vs fraud percent '.format(i), fontsize=22)
+
+        sb.set(font_scale=1.4)
+
+        sb.barplot(x=i,y='class',data=d.transact, order =None)
+        #sb.heatmap(df[['perc']][:20], xticklabels=False)
+        plt.yticks(fontsize=15, rotation=0)
+
+        plt.ylabel('fraud rate', fontsize=20)
+
+        ct += 1
+    plt.subplots_adjust(hspace=.4)
+    plt.show()
+
 
 if __name__ == '__main__':
-    
-    heat_maps()
     plot_country_fraud()
+    exit()
+    barplots()
+
+    heat_maps()
     fraud_histgram()
     classifier_costs()
     classifier()
