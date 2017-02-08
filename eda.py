@@ -29,6 +29,10 @@ class data(object):
 
     def load(self):
         self.transact = pd.read_csv('./Fraud/data_with_countries.csv')
+        self.multiple_device_ids()
+        self.clean()
+
+
         return self.transact
 
     def save(self):
@@ -46,6 +50,21 @@ class data(object):
             return self.country_ip['country'][match].to_string(index=False)
         else:
             return 'unknown'
+    def multiple_device_ids(self):
+
+        device_users = self.transact.groupby('device_id')['user_id'].unique()
+
+        device_users = pd.DataFrame(device_users)
+
+        device_users['num_users'] = device_users['user_id'].apply(len)
+        device_users.reset_index(inplace=True)
+
+
+
+
+        self.transact = pd.merge(self.transact, device_users, how='left', on='device_id',suffixes=('','_y'))
+        print self.transact.groupby('num_users')['device_id'].count()
+
 
     def clean(self):
         '''calculate account age, bin ranges for account age, customer age, purchase values, merge continent data'''
@@ -60,17 +79,20 @@ class data(object):
 
         self.transact['age_range'] = pd.qcut(self.transact['age'], 5)
         self.transact['purchase_range'] = pd.qcut(self.transact['purchase_value'], 4)
+        self.transact['users_device_range']= pd.cut(self.transact['num_users'],bins=[0,1,2,3,5,7,30])
+
 
         self.transact = pd.merge(self.transact, country_cont_map(), how='left', left_on='country', right_on='Country')
         self.transact.fillna('Unknown', inplace=True)
         self.transact.drop('Country', inplace=True, axis=1)
         return self.transact
 
-    def model_inputs(self):
+    def model_inputs(self, mask=['source', 'sex', 'Continent',  'age_range', 'account_age_cat','users_device_range']):
         '''ouput dummied features for model'''
-        self.inputs = self.transact[['source', 'sex', 'Continent', 'account_age_cat', 'age_range']]
-
+        self.inputs = self.transact[mask]
         self.inputs = pd.get_dummies(self.inputs)
+
+
         return self.inputs
 
     def model_outputs(self):
@@ -90,7 +112,8 @@ def plot_country_fraud():
     d = data()
     d.load()
 
-    d.clean()
+    print d.transact.columns
+
 
     total_frauds = d.transact['class'].sum()
     countries = pd.pivot_table(d.transact, index='country', values='user_id', columns='class', aggfunc='count',
@@ -119,27 +142,36 @@ def plot_country_fraud():
     ax.bar(np.arange(-.4,top-.4,1), countries['fraud_percent_total'][:top].values, label='percent of total fraud', color=[.5, 0, .2])
     plt.xticks(range(top), countries.index[:top], rotation=45, fontsize=16)
     plt.legend(loc='upper left', fontsize=20)
-    ax2 = ax.twinx()
+    ddx2 = ax.twinx()
     ax2.set_ylabel('country fraud rate', fontsize=15)
 
     ax2.plot(range(top), countries['fraud_rate'][:top], label='country fraud rate', color='red', linestyle='dashed')
 
     plt.legend(loc='upper center', fontsize=20)
     plt.grid(b=None, which='both')
-    # plt.set_cmap('hot')
     plt.show()
 
 
-def fraud_histgram():
+def fraud_duplicate_devices():
     '''plot purchase value for records with fraud class'''
     d = data()
     d.load()
 
     f = plt.figure(3, figsize=(25, 15))
-    f.suptitle('Figure 3: Fraud purchase value cumulative distribution', fontsize=26)
+    f.suptitle('Figure 3: Fraud - Multiple users per Device', fontsize=26)
     ax = f.add_subplot(111)
-    plt.hist(d.transact['purchase_value'][d.transact['class'] == 1], alpha=.7, cumulative=True, normed=True)
-    plt.xlabel('Purchase Value ($)', fontsize=18)
+    #plt.hist(d.transact['purchase_value'][d.transact['class'] == 1],alpha=.7, cumulative=True, normed=True)
+
+    #plt.hist(d.transact['num_users'][d.transact['class'] == 1], bins=10,alpha=.7, cumulative=False, normed=True,label='Fraudulent')
+    #plt.hist(d.transact['num_users'][(d.transact['class'] == 0) & (d.transact['num_users']>1) ], bins=10, alpha=.7, cumulative=False, normed=False, label ='Normal',stacked=True)
+    #plt.hist(d.transact['country'][d.transact['class'] == 1 ], alpha=.7,
+             # cumulative=False, normed=False, label='Fraud',stacked=True)
+
+
+    #print d.transact[d.transact['class'] == 1].groupby(['country'])['country'].count()
+
+
+    plt.xlabel('Number of Users per Device', fontsize=18)
     plt.ylabel('Frequency', fontsize=18)
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
@@ -186,13 +218,13 @@ def heat_maps():
     plt.show()
 
 
-def classifier():
+def classifier(mask=None):
     '''actual model enclosed, produces probabilities of fraud, and purchase values for the economics'''
     d = data()
     d.load()
-    d.clean()
-    x = d.model_inputs()
+    x = d.model_inputs(mask)
     y = d.model_outputs()
+
 
     indices = x.index
 
@@ -228,76 +260,95 @@ def classifier():
 
 
 
-def classifier_costs():
+def classifier_costs(fig=None,title=None,admin_cost=[5], mask=None,scenarios=None,rows=None,columns=None):
     '''calculates average fraud costs associated with different thresholds of the model'''
-    ytest, probas, purchase_test = classifier()
 
     '''loss occurs for false negative scenario'''
     loss_matrix = np.array([[0, 0],
                             [1, 0]])
 
-
-    admin_cost = 5
-    '''admin costs incurred for any positive prediction'''
-    admin_cost_matrix = np.array([[0, admin_cost],
-                                  [0, admin_cost]])
-
-    thresholds = [.1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
-    losses = []
-    admin_costs = []
-    total_costs = []
-
-    for threshold in thresholds:
-        ypredict = (probas > threshold).astype(int)
-
-        confusion = np.stack([ytest, ypredict], axis=0)
-
-        print confusion
-
-        loss_calc = loss_matrix[confusion[0, :], confusion[1, :]] * purchase_test
-        admin_calc = admin_cost_matrix[confusion[0, :], confusion[1, :]]
+    n_scenarios=len(scenarios)
+    n_costs=len(admin_cost)
 
 
-        avg_loss = np.mean(loss_calc)
-        avg_admin_cost = np.mean(admin_calc)
-        total_loss = avg_loss + avg_admin_cost
 
-        losses.append(avg_loss)
-        admin_costs.append(avg_admin_cost)
-        total_costs.append(total_loss)
-
-    print thresholds
-    print losses
-    print admin_costs
-    print total_costs
-
-
-    f = plt.figure(4, figsize=(25, 15))
+    f = plt.figure(num=fig, figsize=(columns*12,rows*12))
     f.suptitle(
-        'Fig. 4: Fraud Cost per Customer vs Classifier Threshold (${:.2f} admin cost / incident)'.format(admin_cost),
+        'Fig. {}: {} '.format(fig,title),
         fontsize=26)
-    ax = f.add_subplot(111)
-    plt.stackplot(thresholds, [losses, admin_costs], baseline='zero', labels=['direct fraud costs', 'admin costs'],
-                  alpha=.6)
-    plt.xlabel('Classifier Threshold    ', fontsize=16)
-    plt.xticks(fontsize=16)
-    plt.yticks(fontsize=16)
-    plt.ylabel('Cost per Customer $', fontsize=16)
-    plt.legend(fontsize=16)
 
-    xpoint = thresholds[np.argmin(total_costs)]
-    ypoint = min(total_costs)
+    ct=0
+    axes=[]
+    for n,s in enumerate(scenarios):
 
-    #
-    plt.annotate('', xy=(xpoint, ypoint), xytext=(xpoint - .1, ypoint + .6),
-                 arrowprops=dict(facecolor='black', shrink=0.05, connectionstyle='arc3'), fontsize=16
-                 )
+        ytest, probas, purchase_test = classifier(s[1])
 
-    bbox_props = dict(boxstyle="round4,pad=0.4", fc="yellow", ec="b", lw=3, alpha=.6)
-    t = ax.text(xpoint - .1, ypoint + .7, "Minimum Cost ${:.2f}".format(ypoint), ha="center", va="center", rotation=0,
-                size=18, fontsize=18,
-                bbox=bbox_props)
+        for cost in admin_cost:
+            ct+=1
+            thresholds = [.1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
+            losses = []
+            admin_costs = []
+            total_costs = []
 
+            '''admin costs incurred for any positive prediction'''
+            admin_cost_matrix = np.array([[0, cost],
+                                          [0, cost]])
+
+            for threshold in thresholds:
+                ypredict = (probas > threshold).astype(int)
+
+                confusion = np.stack([ytest, ypredict], axis=0)
+
+                print confusion
+
+                loss_calc = loss_matrix[confusion[0, :], confusion[1, :]] * purchase_test
+                admin_calc = admin_cost_matrix[confusion[0, :], confusion[1, :]]
+
+
+                avg_loss = np.mean(loss_calc)
+                avg_admin_cost = np.mean(admin_calc)
+                total_loss = avg_loss + avg_admin_cost
+
+                losses.append(avg_loss)
+                admin_costs.append(avg_admin_cost)
+                total_costs.append(total_loss)
+
+            print thresholds
+            print losses
+            print admin_costs
+            print total_costs
+
+
+            ax = f.add_subplot(rows,columns,ct)
+
+
+
+
+
+            plt.stackplot(thresholds, [losses, admin_costs], baseline='zero', labels=['direct fraud costs', 'admin costs'],
+                          alpha=.6)
+
+
+            plt.title(s='{}\n${:.2f} admin cost/incident'.format(s[0],cost) ,fontsize=20)
+            plt.xlabel('Classifier Threshold    ', fontsize=16)
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
+            plt.ylabel('Cost per Customer $', fontsize=16)
+            plt.legend(fontsize=16)
+
+            xpoint = thresholds[np.argmin(total_costs)]
+            ypoint = min(total_costs)
+
+        #
+            plt.annotate('', xy=(xpoint, ypoint), xytext=(xpoint + .1, ypoint + 2),
+                     arrowprops=dict(facecolor='black', shrink=0.05, connectionstyle='arc3'), fontsize=16
+                     )
+
+            bbox_props = dict(boxstyle="round4,pad=0.4", fc="yellow", ec="b", lw=3, alpha=1)
+            t = ax.text(xpoint + .1, ypoint + 2.2, "Minimum Cost ${:.2f}".format(ypoint), ha="center", va="center",              rotation=0,
+                    size=18, fontsize=18,
+                    bbox=bbox_props)
+    plt.subplots_adjust(hspace=.4)
     plt.show()
 
 
@@ -315,18 +366,17 @@ def barplots():
     d = data()
     d.load()
 
-    d.clean()
 
     f = plt.figure(1, figsize=(25, 15))
     f.suptitle('Figure 1: Transaction fraud vs Category', fontsize=26)
     ct = 1
 
     # print d.transact.columns
-    index = [u'source', u'sex', u'Continent', u'account_age_cat', u'age_range', u'purchase_range']
+    index = [u'source', u'sex', u'Continent', u'account_age_cat', u'age_range', u'purchase_range','num_users']
 
-    for i in index:
-        ax = f.add_subplot(2, 3, ct)
-        plt.title('{} vs fraud percent '.format(i), fontsize=22)
+    for n,i in enumerate(index):
+        ax = f.add_subplot(3, 3, ct)
+        plt.title('1({}) {} vs fraud percent '.format(chr(97+n),i), fontsize=22)
 
         sb.set(font_scale=1.4)
 
@@ -337,17 +387,35 @@ def barplots():
         plt.ylabel('fraud rate', fontsize=20)
 
         ct += 1
-    plt.subplots_adjust(hspace=.4)
+    plt.tight_layout()
+    plt.subplots_adjust(top=.85)
     plt.show()
 
 
 if __name__ == '__main__':
-    plot_country_fraud()
+    mask = ['source', 'sex', 'Continent', 'age_range', 'account_age_cat', 'users_device_range']
+
+    # scenarios = [('All Features', mask),
+    #              ('less Users per Device', mask[:-1]),
+    #              ('less Account Age', mask[:-2])]
+    #
+    # classifier_costs(fig=3,title='Fraud cost vs Model Features',admin_cost=[5],mask=mask,scenarios=scenarios,rows=3,columns=1)
+
+
+    scenarios = [('All Features', mask),]
+    classifier_costs(fig=4, admin_cost=[0,10,20], mask=mask, scenarios=scenarios,rows=3,columns=1)
+
     exit()
+    fraud_duplicate_devices()
     barplots()
 
+
+
+
+
+
+    plot_country_fraud()
     heat_maps()
-    fraud_histgram()
-    classifier_costs()
+
     classifier()
     plot_countries()
