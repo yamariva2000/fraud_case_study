@@ -7,7 +7,7 @@ Starting with a dataset of about 151,000 unique customer transactions, 14,000 tr
 
 Next, I looked at fraud rates for segments of the customer population.  One variable of interest was the age of the customer account.  It would make sense that newer accounts without much history would tend to have a higher proportion of the fraudulent activities.  I calculated the difference between the sign up date and the purchase data, and binned the results into quartiles.  I also binned customer ages into quintiles and purchase value into quartiles.  
 
-As a further check, I verified that each of the 151,000 transactions belonged to a unique user_id.  I also checked the uniqueness of the device_id and found that 131,000 devices were each used in one transaction, but about 20,000 devices were used in multiple transactions.  It is possible that unique customers living in the same household might use a common device, but I wanted to investigate further.  It turns out that the remaining 20,500 transactions were associated with devices used in 2 to 20 transactions.  
+As a further check, I verified that each of the 151,000 transactions belonged to a unique user_id.  I also checked the uniqueness of the device_id and found that 131,000 devices were each used in one transaction, but about 20,000 transactions were associated with customers using common devices.  It is possible that unique customers living in the same household might use a common device, but I wanted to investigate further.  It turns out that the remaining 20,500 transactions were associated with devices used in 2 to 20 transactions.  
 
 ![Fig 1](./figure_1.png)
 
