@@ -17,7 +17,7 @@ def country_cont_map():
     return country_cont
 
 
-class data(object):
+class data:
     '''prepares data for eda, plotting, and model use'''
 
     def make(self):
@@ -34,7 +34,8 @@ class data(object):
         return self.transact
 
     def save(self):
-        self.transact.to_csv('data_with_countries.csv')
+        self.transact.to_csv(''
+                             'ed_data.csv')
 
     def add_countries(self):
         '''create column for country by mapping to the ip address table'''
@@ -59,7 +60,7 @@ class data(object):
         device_users.reset_index(inplace=True)
 
         self.transact = pd.merge(self.transact, device_users, how='left', on='device_id', suffixes=('', '_y'))
-        print self.transact.groupby('num_users')['device_id'].count()
+        print (self.transact.groupby('num_users')['device_id'].count())
 
     def clean(self):
         '''calculate account age, bin ranges for account age, customer age, purchase values, merge continent data'''
@@ -76,7 +77,11 @@ class data(object):
         self.transact['purchase_range'] = pd.qcut(self.transact['purchase_value'], 4)
         self.transact['users_device_range'] = pd.cut(self.transact['num_users'], bins=[0, 1, 2, 3, 5, 7, 30])
         self.transact = pd.merge(self.transact, country_cont_map(), how='left', left_on='country',      right_on='Country')
-        self.transact.fillna('Unknown', inplace=True)
+
+
+        #self.transact.fillna('Unknown', inplace=True)
+
+
         self.transact.drop('Country', inplace=True, axis=1)
         return self.transact
 
@@ -104,7 +109,7 @@ def plot_country_fraud():
     d = data()
     d.load()
 
-    print d.transact.columns
+    print (d.transact.columns)
 
     total_frauds = d.transact['class'].sum()
     countries = pd.pivot_table(d.transact, index='country', values='user_id', columns='class', aggfunc='count',
@@ -135,7 +140,7 @@ def plot_country_fraud():
            color=[.5, 0, .2])
     plt.xticks(range(top), countries.index[:top], rotation=45, fontsize=16)
     plt.legend(loc='upper left', fontsize=20)
-    ddx2 = ax.twinx()
+    ax2 = ax.twinx()
     ax2.set_ylabel('country fraud rate', fontsize=15)
 
     ax2.plot(range(top), countries['fraud_rate'][:top], label='country fraud rate', color='red', linestyle='dashed')
@@ -197,17 +202,17 @@ def classifier(mask=None):
 
     indexes = np.argsort(model.feature_importances_)[::-1]
     '''feature importances'''
-    print [x.columns[i] for i in indexes]
+    print ([x.columns[i] for i in indexes])
 
     probas_predict = model.predict_proba(xtest)[:, 1]
     ypredict = model.predict(xtest)
 
     '''scoring metrics'''
-    print 'confusion matrix'
-    print confusion_matrix(ytest, ypredict)
+    print ('confusion matrix')
+    print (confusion_matrix(ytest, ypredict))
 
-    print 'f1-score'
-    print f1_score(ytest, ypredict)
+    print ('f1-score')
+    print (f1_score(ytest, ypredict))
 
     return ytest.values, probas_predict, purchase_test
 
@@ -249,7 +254,7 @@ def classifier_costs(fig=None, title=None, admin_cost=[5], mask=None, scenarios=
 
                 confusion = np.stack([ytest, ypredict], axis=0)
 
-                print confusion
+                print (confusion)
 
                 loss_calc = loss_matrix[confusion[0, :], confusion[1, :]] * purchase_test
                 admin_calc = admin_cost_matrix[confusion[0, :], confusion[1, :]]
@@ -262,10 +267,10 @@ def classifier_costs(fig=None, title=None, admin_cost=[5], mask=None, scenarios=
                 admin_costs.append(avg_admin_cost)
                 total_costs.append(total_loss)
 
-            print thresholds
-            print losses
-            print admin_costs
-            print total_costs
+            print (thresholds)
+            print (losses)
+            print (admin_costs)
+            print (total_costs)
 
             ax = f.add_subplot(rows, columns, ct)
 
@@ -302,16 +307,16 @@ def plot_countries():
     d.load()
     d.clean()
 
-    print pd.pivot_table(d.transact, index=['Continent', 'country'], columns='class',
+    print (pd.pivot_table(d.transact, index=['Continent', 'country'], columns='class',
                          aggfunc='count', values='user_id', margins=True, margins_name='Total', fill_value=0
-                         )
+                         ))
 
 
 def barplots():
     '''make pivot tables across several variables to present in seaborn heat map'''
     d = data()
     d.load()
-
+    d.save()
     f = plt.figure(1, figsize=(25, 15))
     f.suptitle('Figure 1: Transaction fraud vs Category', fontsize=26)
     ct = 1
